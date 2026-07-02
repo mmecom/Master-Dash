@@ -79,22 +79,6 @@
 .topbar-water-add.flash {
   background: linear-gradient(180deg, rgba(125, 211, 252, 0.7), rgba(110, 231, 183, 0.7));
 }
-.topbar-finance-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 44px; height: 42px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  text-decoration: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s;
-}
-.topbar-finance-btn:hover { background: rgba(255, 255, 255, 0.08); }
-.topbar-finance-icon {
-  font-size: 20px; line-height: 1;
-  filter: grayscale(100%) brightness(1.4);
-  opacity: 0.85;
-}
 
 /* Bottom tab bar — Instagram-style */
 .bottombar {
@@ -142,8 +126,6 @@ body.has-bottombar {
   .topbar-water-pill { padding: 8px 11px; gap: 6px; }
   .topbar-pill-count { font-size: 12px; }
   .topbar-water-add { width: 40px; font-size: 18px; }
-  .topbar-finance-btn { width: 40px; height: 38px; }
-  .topbar-finance-icon { font-size: 18px; }
   .bottombar-tab-icon { font-size: 22px; }
   .bottombar-tab { font-size: 10px; }
 }
@@ -192,11 +174,51 @@ body.topbar-modal-open {
     overscroll-behavior: contain;
   }
 }
+
+/* Help (?) button + modal */
+.topbar-help-btn {
+  margin-right: auto;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.05);
+  color: #FAFAFA; font-family: inherit; font-size: 16px; font-weight: 700; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.15s;
+}
+.topbar-help-btn:hover { background: rgba(255,255,255,0.10); }
+.help-modal-bg {
+  display: none; position: fixed; inset: 0; z-index: 60;
+  background: rgba(0,0,0,0.66); backdrop-filter: blur(6px);
+  align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto;
+}
+.help-modal-bg.show { display: flex; }
+.help-modal {
+  width: 100%; max-width: 560px; margin: auto;
+  background: #101012; border: 1px solid rgba(255,255,255,0.09); border-radius: 18px;
+  padding: 22px 22px 26px; color: #B8B6B0;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+}
+.help-modal h2 { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #FAFAFA; }
+.help-modal .help-intro { font-size: 13px; color: #76746E; margin: 0 0 16px; line-height: 1.5; }
+.help-modal h3 {
+  margin: 18px 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: #9c9a94;
+}
+.help-modal p { font-size: 13.5px; line-height: 1.6; margin: 0 0 8px; }
+.help-modal code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12.5px;
+  background: rgba(255,255,255,0.06); color: #E8E5DD; padding: 2px 6px; border-radius: 6px;
+  display: inline-block; margin: 2px 0;
+}
+.help-modal .help-close {
+  margin-top: 20px; width: 100%; padding: 13px; border: 0; border-radius: 12px;
+  background: linear-gradient(180deg,#FFFFFF,#E8E5DD); color: #0A0A0B;
+  font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
 `;
 
   // -------- HTML --------
   const topbarHtml = `
 <header class="topbar" id="topbar" role="navigation" aria-label="Quick actions">
+  <button class="topbar-help-btn" id="topbarHelp" type="button" aria-label="How this page works">?</button>
   <div class="topbar-water-wrap">
     <a href="health.html#water" class="topbar-water-pill" id="topbarWater" aria-label="Water progress">
       <span class="topbar-pill-dot"></span>
@@ -204,9 +226,6 @@ body.topbar-modal-open {
     </a>
     <button class="topbar-water-add" id="topbarWaterAdd" aria-label="Log one drink" type="button">+</button>
   </div>
-  <a href="finance.html" class="topbar-finance-btn" id="topbarFinance" aria-label="Finance">
-    <span class="topbar-finance-icon">📊</span>
-  </a>
 </header>
 `;
 
@@ -215,6 +234,10 @@ body.topbar-modal-open {
   <a href="index.html" class="bottombar-tab" data-page="main">
     <span class="bottombar-tab-icon">🏠</span>
     <span>Main</span>
+  </a>
+  <a href="daily.html" class="bottombar-tab" data-page="daily">
+    <span class="bottombar-tab-icon">✅</span>
+    <span>Daily</span>
   </a>
   <a href="health.html" class="bottombar-tab" data-page="health">
     <span class="bottombar-tab-icon">💊</span>
@@ -227,22 +250,17 @@ body.topbar-modal-open {
 </nav>
 `;
 
-  // Pages where we suppress the app chrome: finance has its own internal
-  // 4-tab bottom nav and self-contained back button.
-  function isFinancePage() {
-    const p = (window.location.pathname || '').toLowerCase();
-    return p.endsWith('/finance.html') || p.endsWith('finance.html');
-  }
   // When the water tracker is iframed inside health.html, the embedded
   // page shouldn't render its own chrome again.
   function isEmbedded() {
     try { return window.self !== window.top; } catch (e) { return true; }
   }
   function shouldShowChrome() {
-    return !isFinancePage() && !isEmbedded();
+    return !isEmbedded();
   }
   function currentPageKey() {
     const p = (window.location.pathname || '').toLowerCase();
+    if (p.endsWith('daily.html')) return 'daily';
     if (p.endsWith('health.html')) return 'health';
     if (p.endsWith('gym.html')) return 'fitness';
     return 'main'; // index.html, /, or anything else falls back to main
@@ -462,11 +480,131 @@ body.topbar-modal-open {
     sync();
   }
 
+  // -------- Help ("?" → uitleg + berekeningen per pagina) --------
+  const HELP = {
+    home: {
+      title: 'Startscherm',
+      intro: 'Tegels naar elke tracker. Tik een tegel om te openen.',
+      body: '<p>Elke pagina heeft rechtsboven z\'n eigen <b>?</b> met uitleg over die pagina en de berekeningen die erin zitten.</p>'
+    },
+    main: {
+      title: 'Main — dag & doelen',
+      intro: 'Je overzicht voor vandaag. De dag rolt om 06:00 om naar de volgende dag.',
+      body:
+        '<h3>Dag-ring</h3>' +
+        '<p>Laat zien hoeveel van je wakkere dag (08:00–24:00) voorbij is.</p>' +
+        '<p><code>% = (uur − 8) / (24 − 8) × 100</code></p>' +
+        '<p>Vóór 08:00 telt de ring af tot opstaan; na 24:00 verschijnt “Sleep!”.</p>' +
+        '<h3>Doelen & streak</h3>' +
+        '<p>Afgevinkt / totaal van vandaag. <b>Streak</b> = aantal dagen op rij dat álle doelen af waren.</p>' +
+        '<h3>Today\'s stats</h3>' +
+        '<p>Haalt per tracker de dagwaarde op: doelen, habits, mood/energie/slaap, water, cafeïne, gym-sets en gewicht. Geen data = <code>—</code>.</p>'
+    },
+    health: {
+      title: 'Health — WHOOP & supplementen',
+      intro: 'Herstel en slaap uit WHOOP, plus je dagelijkse supplement-stack.',
+      body:
+        '<h3>WHOOP recovery</h3>' +
+        '<p>Komt rechtstreeks uit WHOOP.</p>' +
+        '<p><code>≥ 67 groen (go hard) · 34–66 amber · &lt; 34 rood (rust)</code></p>' +
+        '<h3>Slaap</h3>' +
+        '<p>Sleep performance % uit WHOOP: hoeveel slaap je kreeg t.o.v. wat je nodig had.</p>' +
+        '<h3>Supplement stack</h3>' +
+        '<p>Afgevinkt / totaal per dag.</p>'
+    },
+    fitness: {
+      title: 'Fitness',
+      intro: 'Progressive-overload tracker, gewicht en lichaamssamenstelling.',
+      body:
+        '<h3>Geschat 1RM (Epley)</h3>' +
+        '<p><code>1RM = gewicht × (1 + reps / 30)</code> — bij minder dan 2 reps geldt gewoon het gewicht zelf.</p>' +
+        '<h3>Volgende sessie</h3>' +
+        '<p>Zit je bovenin je rep-range? Dan is het advies: gewicht omhoog met je ingestelde <i>increment</i>.</p>' +
+        '<h3>Gewicht</h3>' +
+        '<p>7-daagse verschil = nu − gewicht ~7 dagen terug (met %). Het weekoverzicht toont het <b>weekgemiddelde</b> vs de week ervoor.</p>' +
+        '<h3>Spier vs vet (schatting, ~30 dagen)</h3>' +
+        '<p><code>weightDelta = nu − 30d terug</code></p>' +
+        '<p><code>strengthDelta = gem. 1RM nu / 1RM 30d terug</code></p>' +
+        '<p>Max spiergroei per week (Lyle McDonald): 1 jaar 0,45 · 2 jaar 0,23 · 3 jaar+ 0,11 kg.</p>' +
+        '<p><code>spier = rate × weken × (1 + strengthDelta)</code>, begrensd tussen 0 en weightDelta. <code>vet = weightDelta − spier</code>.</p>' +
+        '<h3>Progression</h3>' +
+        '<p>Per oefening een lijn van je geschatte 1RM over de tijd. %-verandering = <code>(laatste − eerste) / eerste</code>.</p>'
+    },
+    daily: {
+      title: 'Daily — habits, check-in, journal, insights',
+      intro: 'Dagelijkse habits + reflectie. De dag rolt om 06:00 om.',
+      body:
+        '<h3>Habits</h3>' +
+        '<p>Afgevinkt / ingepland vandaag. Ingepland = dagelijks, op gekozen weekdagen, of X× per week. <b>Streak</b> = dagen op rij met alles af.</p>' +
+        '<h3>Maandoverzicht</h3>' +
+        '<p>Per dag een balk met het dagpercentage.</p>' +
+        '<p><code>dag% = afgevinkt uit maand-set / grootte maand-set</code></p>' +
+        '<p>De maand-set = alle habits die die maand minstens 1× zijn afgevinkt (vaste noemer, net als je sheet).</p>' +
+        '<h3>Insights — completion %</h3>' +
+        '<p>Per habit over de gekozen periode (Maand = 30 dagen, Jaar = 365, All = alles). Bij “X×/week” telt per week <code>min(gedaan, target) / target</code>, dus 1×/week gehaald = 100%.</p>' +
+        '<h3>Habit → energie</h3>' +
+        '<p><code>gem. energie mét habit − gem. energie zónder</code> (minstens 3 dagen elk). Vereist dat je energie logt in de check-in.</p>' +
+        '<h3>Trends</h3>' +
+        '<p>Gemiddelde van je laatste 30 check-ins (mood / energie / slaap).</p>'
+    },
+    water: {
+      title: 'Water — dagdoel',
+      intro: 'Je waterdoel past zich aan op gewicht, beweging, cafeïne e.d.',
+      body:
+        '<h3>Dagdoel (ml)</h3>' +
+        '<p><code>gewicht(kg) × 35</code></p>' +
+        '<p>+ beweging: <code>(uur/week ÷ 7) × 500</code></p>' +
+        '<p>+ cafeïne: <code>max(0, mg − 200) × 1,5</code></p>' +
+        '<p>+ extra middelen · + man <code>+200</code> · + leeftijd ≥ 50 <code>+100</code></p>' +
+        '<p>Aantal eenheden = <code>doel ÷ volume per eenheid</code> (fles / glas / oz / ml).</p>'
+    },
+    caffeine: {
+      title: 'Cafeïne',
+      intro: 'Hoeveel cafeïne er nu nog actief in je lichaam zit.',
+      body:
+        '<h3>Actief in je lichaam</h3>' +
+        '<p><code>dosis × 0,5 ^ (uren / 5)</code></p>' +
+        '<p>Halfwaardetijd ≈ 5 uur: elke 5 uur halveert de hoeveelheid.</p>' +
+        '<h3>Dagtotaal</h3>' +
+        '<p>Som van alle mg die je vandaag hebt gelogd. FDA-max ≈ 400 mg/dag.</p>' +
+        '<h3>Piek & afbouw</h3>' +
+        '<p>Piek ~45 min na inname; “cleared” zodra het onder ~10 mg zakt.</p>'
+    }
+  };
+  function helpKey(path) {
+    path = (path || '').toLowerCase();
+    if (path.endsWith('health.html')) return 'health';
+    if (path.endsWith('gym.html')) return 'fitness';
+    if (path.endsWith('daily.html')) return 'daily';
+    if (path.endsWith('po-water.html')) return 'water';
+    if (path.endsWith('caffeine.html')) return 'caffeine';
+    if (path.endsWith('index.html') || path === '/' || path === '') return 'home';
+    return 'main';
+  }
+  function openHelp() {
+    let bg = document.getElementById('helpModalBg');
+    if (!bg) {
+      bg = document.createElement('div'); bg.className = 'help-modal-bg'; bg.id = 'helpModalBg';
+      bg.innerHTML = '<div class="help-modal"><h2 id="helpTitle"></h2><p class="help-intro" id="helpIntro"></p>' +
+        '<div id="helpBody"></div><button class="help-close" id="helpClose" type="button">Sluiten</button></div>';
+      document.body.appendChild(bg);
+      bg.addEventListener('click', (e) => { if (e.target === bg) bg.classList.remove('show'); });
+      bg.querySelector('#helpClose').addEventListener('click', () => bg.classList.remove('show'));
+    }
+    const h = HELP[helpKey(location.pathname)] || HELP.main;
+    bg.querySelector('#helpTitle').textContent = h.title;
+    bg.querySelector('#helpIntro').textContent = h.intro;
+    bg.querySelector('#helpBody').innerHTML = h.body;
+    bg.classList.add('show');
+  }
+
   // -------- Boot --------
   function boot() {
     injectStyleAndHTML();
     const btn = document.getElementById('topbarWaterAdd');
     if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); addWater(); });
+    const helpBtn = document.getElementById('topbarHelp');
+    if (helpBtn) helpBtn.addEventListener('click', openHelp);
     render();
     lockGestures();
     startModalLock();

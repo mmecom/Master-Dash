@@ -289,6 +289,9 @@ body::after {
 
   /* ============ Pharmacokinetics ============ */
   const HALF_LIFE_H = 5, PEAK_MIN = 45, FDA_MAX = 400;
+  // Absorption rate (per hour). Combined with the 5h half-life this makes the
+  // curve rise to its peak ~45 min after intake instead of jumping instantly.
+  const ABS_KA = 4.9;
 
   /* ============ Beverage database ============ */
   const DB = [
@@ -360,7 +363,14 @@ body::after {
   function fmtTime(ts) { const d=new Date(ts); return fmtClock(d.getHours()+d.getMinutes()/60); }
 
   /* ============ Pharmacokinetics ============ */
-  function activeAt(dose, ts, t) { const hrs=(t-ts)/3600000; return hrs<0?0:dose*Math.pow(0.5,hrs/HALF_LIFE_H); }
+  function activeAt(dose, ts, t) {
+    const hrs = (t - ts) / 3600000;
+    if (hrs < 0) return 0;
+    // Rise-then-decay: dose·0.5^(h/5) minus a fast-decaying absorption term.
+    // At h=0 → 0 (no instant spike); peaks ~45 min; tail = the same 5h decay.
+    const v = dose * (Math.pow(0.5, hrs / HALF_LIFE_H) - Math.exp(-ABS_KA * hrs));
+    return v > 0 ? v : 0;
+  }
   function totalActiveAt(t) { let s=0; for(const l of logs) s+=activeAt(l.mg,l.ts,t); return s; }
   function milestones(l) {
     const peak=l.ts+PEAK_MIN*60000, half=l.ts+HALF_LIFE_H*3600000;

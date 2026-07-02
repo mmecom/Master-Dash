@@ -6,7 +6,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050506">
-<title>Rowans Dashboard</title>
+<title>Omar's Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="sync.js" defer></script>
 <script src="topbar.js" defer></script>
@@ -595,12 +595,24 @@ body::after {
   .gm-card { padding: 16px; }
   .gm-progress-num { font-size: 36px; }
 }
+
+/* ===== Today's stats overview ===== */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
+.stat-tile { position: relative; overflow: hidden; padding: 14px 12px 13px 15px;
+  background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; }
+.stat-tile::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent, #6BE3A4); opacity: 0.85; }
+.stat-tile .sv { font-size: 24px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+  color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.stat-tile .sv.muted { color: var(--text-tertiary); }
+.stat-tile .sl { margin-top: 7px; font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-tertiary); }
+@media (max-width: 480px) { .stat-grid { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); } .stat-tile .sv { font-size: 21px; } }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <h1 class="dash-title">Rowans Dashboard</h1>
+  <h1 class="dash-title">Omar's Dashboard</h1>
 
   <div class="ticker-row">
     <div class="goal-ticker" id="goalTicker" aria-live="polite" aria-atomic="true">
@@ -690,6 +702,14 @@ body::after {
         <button type="button" id="tomorrowPolishBtn" class="gm-polish">✨ Polish</button>
         <div class="gm-status" id="tomorrowStatus"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== Today's stats overview (all trackers at a glance) ===== -->
+  <div class="section">
+    <div class="section-title">Today's stats</div>
+    <div class="gm-card">
+      <div class="stat-grid" id="statGrid"></div>
     </div>
   </div>
 
@@ -1324,6 +1344,94 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 });
+</script>
+
+<script>
+/* ===== Today's stats overview =====
+   Read-only glance at every tracker's numbers for the day. Pulls straight
+   from the same localStorage keys each page writes, so it stays in sync. */
+(function () {
+  'use strict';
+  function get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+  function fmt(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  // 6 AM rollover for goals / habits / check-in (matches the rest of the app)
+  function activeDate() { var n = new Date(); var d = new Date(n); if (n.getHours() < 6) d.setDate(d.getDate() - 1); return fmt(d); }
+  function calDate() { return fmt(new Date()); }
+
+  function goalsToday() { var g = get('goals:' + activeDate()); if (!Array.isArray(g)) return { done: 0, total: 0 };
+    return { done: g.filter(function (x) { return x && x.done; }).length, total: g.length }; }
+
+  function habitsToday() {
+    var items = get('habits:items'); if (!Array.isArray(items)) return { done: 0, total: 0 };
+    var done = get('habits:done:' + activeDate()) || {};
+    var dow = new Date(activeDate().replace(/-/g, '/')).getDay();
+    var sched = items.filter(function (h) {
+      if (h.isActive === false) return false;
+      if (h.frequencyType === 'days') return (h.frequencyDays || []).indexOf(dow) !== -1;
+      return true; // daily + times_per_week
+    });
+    return { done: sched.filter(function (h) { return done[h.id]; }).length, total: sched.length };
+  }
+
+  function waterToday() {
+    var s = get('po_water_v1'); if (!s) return { done: 0, total: 0 };
+    var done = (s.logs || {})[calDate()] || 0;
+    var p = s.profile || { weightKg: 75 };
+    var wKg = s.weightUnit === 'lb' ? (p.weightKg || 0) / 2.20462 : (p.weightKg || 0);
+    var totalMl = wKg * 35 + (p.activityHrsPerWeek || 0) / 7 * 500 + Math.max(0, (s.caffeineMgPerDay || 0) - 200) * 1.5
+      + (s.substances || []).reduce(function (a, x) { var dose = (x && x.dose != null ? x.dose : (x && x.defaultDose)) || 0; return a + Math.max(0, dose * ((x && x.mlPerUnit) || 0)); }, 0)
+      + (p.sex === 'm' ? 200 : 0) + ((p.age || 0) >= 50 ? 100 : 0);
+    var unitVol = s.unit === 'glass' ? (s.glassMl || 250) : s.unit === 'oz' ? 30 : s.unit === 'ml' ? 1 : (s.bottleMl || 500);
+    return { done: done, total: Math.max(1, Math.ceil(totalMl / unitVol)) };
+  }
+
+  function caffeineToday() {
+    var logs = get('caf:logs'); if (!Array.isArray(logs)) return 0;
+    var n = new Date(), y = n.getFullYear(), m = n.getMonth(), d = n.getDate(), s = 0;
+    logs.forEach(function (l) { var t = new Date(l.ts); if (t.getFullYear() === y && t.getMonth() === m && t.getDate() === d) s += (l.mg || 0); });
+    return Math.round(s);
+  }
+
+  function gymToday() {
+    var st = get('po_coach_v1'); if (!st || !st.logs) return 0;
+    var today = calDate(), sets = 0;
+    Object.keys(st.logs).forEach(function (id) { (st.logs[id] || []).forEach(function (l) { if (l.date && l.date.slice(0, 10) === today) sets++; }); });
+    return sets;
+  }
+
+  function latestWeight() { var w = get('po_coach_weights'); if (!Array.isArray(w) || !w.length) return null;
+    var units = (get('po_coach_v1') || {}).units || 'kg'; return w[w.length - 1].weight + units; }
+
+  function tile(val, label, accent) {
+    var muted = (val === '—');
+    return '<div class="stat-tile" style="--accent:' + accent + '"><div class="sv' + (muted ? ' muted' : '') + '">' + val + '</div><div class="sl">' + label + '</div></div>';
+  }
+
+  function render() {
+    var grid = document.getElementById('statGrid'); if (!grid) return;
+    var g = goalsToday(), h = habitsToday(), w = waterToday();
+    var c = get('checkin:' + activeDate()) || {};
+    var caf = caffeineToday(), gym = gymToday(), wt = latestWeight();
+    var html = '';
+    html += tile(g.total ? g.done + '/' + g.total : '—', 'Goals', '#6BE3A4');
+    html += tile(h.total ? h.done + '/' + h.total : '—', 'Habits', '#A78BFA');
+    html += tile(c.mood != null ? c.mood + '/10' : '—', 'Mood', '#F2C063');
+    html += tile(c.energy != null ? c.energy + '/10' : '—', 'Energy', '#F59E0B');
+    html += tile(c.sleepHours != null ? c.sleepHours + 'h' : '—', 'Sleep', '#60A5FA');
+    html += tile(w.total ? w.done + '/' + w.total : '—', 'Water', '#7DD3FC');
+    html += tile(caf ? caf + 'mg' : '—', 'Caffeine', '#C9A36B');
+    html += tile(gym ? String(gym) : '—', 'Gym sets', '#38BDF8');
+    html += tile(wt || '—', 'Weight', '#B8B6B0');
+    grid.innerHTML = html;
+  }
+
+  render();
+  // Keep fresh as other tabs/devices update, and on return to the page.
+  window.addEventListener('goals-changed', render);
+  window.addEventListener('storage', render);
+  window.addEventListener('focus', render);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });
+})();
 </script>
 </body>
 </html>
